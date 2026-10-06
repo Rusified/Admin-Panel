@@ -101,7 +101,7 @@
     <div id="denied" class="screen-center hidden">
         <h2 style="color: var(--red);">Acceso Denegado</h2>
         <p style="color: var(--text-muted); margin-bottom: 20px;">No tienes privilegios de administrador.</p>
-        <button class="btn outline" onclick="logout()">Cerrar sesión</button>
+        <button class="btn outline" onclick="logout()">Volver al Login</button>
     </div>
 
     <!-- Panel Principal -->
@@ -182,10 +182,8 @@
     const db = getFirestore(app);
     const functions = getFunctions(app);
 
-    // Conexión con las Cloud Functions
     const approveAspirantFn = httpsCallable(functions, 'approveAspirant');
     const revokeAspirantFn = httpsCallable(functions, 'revokeAspirant');
-    const setAdminClaimFn = httpsCallable(functions, 'setAdminClaim');
 
     let allUsers = [];
     let currentFilter = 'pending';
@@ -194,33 +192,34 @@
     // --- 2. VALIDACIÓN DE SEGURIDAD Y ESTADO ---
     onAuthStateChanged(auth, async user => {
         if (user) {
-            // Ocultar formulario de login si está visible
+            // Usuario detectado, mostramos loader mientras verificamos admin
             document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('denied').classList.add('hidden');
             document.getElementById('loader').classList.remove('hidden');
 
             try {
-                // Forzar lectura del token actualizado
+                // Forzar lectura del token actualizado para verificar los claims
                 const idTokenResult = await user.getIdTokenResult(true);
                 
-                // Si el token tiene la marca inmutable "admin: true"
                 if (idTokenResult.claims.admin === true) {
+                    // Es administrador, mostramos panel
                     document.getElementById('loader').classList.add('hidden');
                     document.getElementById('dashboard').classList.remove('hidden');
                     document.getElementById('admin-email').innerText = user.email;
                     
-                    // Iniciar escucha en tiempo real de la base de datos
                     startUsersListener();
                 } else {
-                    // Si está logueado pero no es admin
+                    // Está logueado pero no es admin, mostramos pantalla denegada
                     document.getElementById('loader').classList.add('hidden');
                     document.getElementById('denied').classList.remove('hidden');
                 }
             } catch (error) {
                 console.error("Error validando admin:", error);
-                alert("Error validando sesión.");
+                alert("Error verificando permisos de administrador.");
             }
         } else {
-            // Si NO hay sesión activa, mostramos el login
+            // NO hay usuario logueado. Ocultamos todo excepto el login.
             document.getElementById('loader').classList.add('hidden');
             document.getElementById('dashboard').classList.add('hidden');
             document.getElementById('denied').classList.add('hidden');
@@ -245,12 +244,13 @@
             document.getElementById('loader').classList.remove('hidden');
             
             await signInWithEmailAndPassword(auth, email, password);
-            // Si el login es exitoso, "onAuthStateChanged" se encargará de mostrar el dashboard
+            // El listener "onAuthStateChanged" tomará el control al tener éxito
+            document.getElementById('login-form').reset();
         } catch (error) {
             document.getElementById('loader').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
             
-            errorMsg.innerText = "Credenciales incorrectas o usuario no encontrado.";
+            errorMsg.innerText = "Credenciales incorrectas o problema de conexión.";
             errorMsg.style.display = 'block';
             console.error("Error de login:", error);
         } finally {
@@ -260,8 +260,12 @@
     });
 
     window.logout = async function() {
-        await signOut(auth);
-        // Al cerrar sesión, "onAuthStateChanged" automáticamente mostrará la pantalla de login
+        try {
+            await signOut(auth);
+            // El estado cambiará a null, lo que dispara onAuthStateChanged y mostrará el login automáticamente.
+        } catch (error) {
+            console.error("Error cerrando sesión", error);
+        }
     }
 
     // --- 4. LOGICA EN TIEMPO REAL ---
@@ -295,7 +299,6 @@
         
         tbody.innerHTML = '';
         
-        // Contadores
         let pCount = 0, aCount = 0, dCount = 0;
         
         const filteredUsers = allUsers.filter(u => {
@@ -321,17 +324,14 @@
         filteredUsers.forEach(user => {
             const tr = document.createElement('tr');
             
-            // Columna 1: Email y UID
             const tdInfo = document.createElement('td');
             tdInfo.innerHTML = `<strong style="color:var(--text); display:block;">${user.email || 'Sin correo'}</strong><span style="font-size:0.75rem; color:var(--text-muted);">${user.uid}</span>`;
             
-            // Columna 2: Estado
             const tdStatus = document.createElement('td');
             let badgeClass = user.status;
             let statusText = user.status === 'pending' ? 'Pendiente' : (user.status === 'approved' ? 'Aprobado' : 'Revocado');
             tdStatus.innerHTML = `<span class="badge ${badgeClass}">${statusText}</span>`;
             
-            // Columna 3: Cursos
             const tdCourses = document.createElement('td');
             if (user.courses) {
                 let coursesHtml = Object.keys(user.courses)
@@ -343,7 +343,6 @@
                 tdCourses.innerHTML = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
             }
 
-            // Columna 4: Fecha
             const tdDate = document.createElement('td');
             let dateStr = 'N/A';
             if (user.createdAt && user.createdAt.toDate) {
@@ -351,7 +350,6 @@
             }
             tdDate.innerHTML = `<span style="color:var(--text-muted); font-size:0.85rem;">${dateStr}</span>`;
             
-            // Columna 5: Acciones (Botones dinámicos)
             const tdActions = document.createElement('td');
             const actionDiv = document.createElement('div');
             actionDiv.className = 'actions';
@@ -375,7 +373,6 @@
         targetUidToApprove = uid;
         document.getElementById('approve-email').innerText = email;
         
-        // Reset checkboxes
         document.getElementById('course-udea').checked = false;
         document.getElementById('course-unal').checked = false;
         document.getElementById('course-icfes').checked = false;
