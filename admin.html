@@ -41,9 +41,10 @@
         .badge.disabled { background: rgba(220, 38, 38, 0.15); color: var(--red); }
         .badge.course { background: rgba(37, 99, 235, 0.15); color: var(--blue); margin-right: 5px; }
 
-        /* Formularios */
-        .input-field { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; font-family: inherit; }
-        .input-field:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
+        /* Botón Google */
+        .btn-google { background: #fff; color: #3c4043; border: 1px solid #dadce0; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; cursor: pointer; transition: 0.2s; font-family: 'Inter', sans-serif;}
+        .btn-google:hover { background: #f8f9fa; border-color: #d2e3fc; box-shadow: 0 1px 3px rgba(60,64,67,0.1); }
+        .btn-google svg { width: 20px; height: 20px; }
 
         /* Tabs */
         .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
@@ -83,17 +84,23 @@
         <h2>Cargando...</h2>
     </div>
 
-    <!-- Pantalla de Login -->
+    <!-- Pantalla de Login con Google -->
     <div id="login-screen" class="screen-center hidden">
-        <div class="panel" style="width: 90%; max-width: 400px; padding: 30px;">
+        <div class="panel" style="width: 90%; max-width: 400px; padding: 30px; text-align: center;">
             <h2 style="margin-bottom: 10px;">Iniciar Sesión</h2>
-            <p style="color: var(--text-muted); margin-bottom: 20px; font-size: 0.9rem;">Acceso exclusivo para administradores.</p>
-            <form id="login-form">
-                <input type="email" id="login-email" placeholder="Correo electrónico" required class="input-field">
-                <input type="password" id="login-password" placeholder="Contraseña" required class="input-field">
-                <button type="submit" class="btn accent" style="width: 100%; margin-top: 10px;" id="login-btn">Entrar</button>
-                <p id="login-error" style="color: var(--red); font-size: 0.85rem; margin-top: 15px; display: none; font-weight: 600;"></p>
-            </form>
+            <p style="color: var(--text-muted); margin-bottom: 25px; font-size: 0.9rem;">Acceso exclusivo para administradores.</p>
+            
+            <button id="btn-google-login" class="btn-google">
+                <svg viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+                Continuar con Google
+            </button>
+            
+            <p id="login-error" style="color: var(--red); font-size: 0.85rem; margin-top: 15px; display: none; font-weight: 600;"></p>
         </div>
     </div>
 
@@ -163,7 +170,7 @@
 <script type="module">
     // --- 1. CONFIGURACIÓN Y MÓDULOS ---
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
-    import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getAuth, onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
     import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
     import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-functions.js";
     
@@ -181,6 +188,7 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
     const functions = getFunctions(app);
+    const googleProvider = new GoogleAuthProvider();
 
     const approveAspirantFn = httpsCallable(functions, 'approveAspirant');
     const revokeAspirantFn = httpsCallable(functions, 'revokeAspirant');
@@ -227,35 +235,27 @@
         }
     });
 
-    // --- 3. LÓGICA DE LOGIN Y LOGOUT ---
-    document.getElementById('login-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const password = document.getElementById('login-password').value;
-        const btn = document.getElementById('login-btn');
+    // --- 3. LÓGICA DE LOGIN CON GOOGLE ---
+    document.getElementById('btn-google-login').addEventListener('click', async () => {
         const errorMsg = document.getElementById('login-error');
-
-        btn.innerText = "Verificando...";
-        btn.disabled = true;
         errorMsg.style.display = 'none';
 
         try {
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('loader').classList.remove('hidden');
             
-            await signInWithEmailAndPassword(auth, email, password);
-            // El listener "onAuthStateChanged" tomará el control al tener éxito
-            document.getElementById('login-form').reset();
+            await signInWithPopup(auth, googleProvider);
+            // Si el login es exitoso, "onAuthStateChanged" se encargará del resto automáticamente
         } catch (error) {
             document.getElementById('loader').classList.add('hidden');
             document.getElementById('login-screen').classList.remove('hidden');
             
-            errorMsg.innerText = "Credenciales incorrectas o problema de conexión.";
-            errorMsg.style.display = 'block';
-            console.error("Error de login:", error);
-        } finally {
-            btn.innerText = "Entrar";
-            btn.disabled = false;
+            // Si el usuario cierra el popup de Google, no mostramos un error agresivo
+            if (error.code !== 'auth/popup-closed-by-user') {
+                errorMsg.innerText = "Error al conectar con Google. Intenta de nuevo.";
+                errorMsg.style.display = 'block';
+                console.error("Error de login con Google:", error);
+            }
         }
     });
 
