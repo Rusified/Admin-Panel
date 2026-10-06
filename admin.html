@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración | Parche500</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="shortcut icon" href="../../../../../img/udea.png" type="image/x-icon">
+    <style>
+        :root { 
+            --bg: #ffffff; 
+            --surface: #f4f5f7; 
+            --accent: #10b981; 
+            --accent-hover: #059669; 
+            --text: #09090b; 
+            --text-muted: #52525b; 
+            --border: rgba(0,0,0,0.1); 
+            --blue: #2563eb;
+            --green: #16a34a;
+            --orange: #ea580c;
+            --red: #dc2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--surface); color: var(--text); min-height: 100vh; }
+        
+        /* Layout */
+        .navbar { background: var(--bg); padding: 15px 30px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .navbar h1 { font-size: 1.5rem; font-weight: 900; letter-spacing: -1px; text-shadow: -2px 2px 0 var(--accent); }
+        .container { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+        
+        /* UI Elements */
+        .btn { background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; border: none; cursor: pointer; transition: 0.2s; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .btn.outline { background: transparent; color: var(--text); border: 2px solid var(--text); }
+        .btn.accent { background: var(--accent); color: #fff; border: none; }
+        .btn.danger { background: var(--red); color: #fff; border: none; }
+        
+        .badge { padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; }
+        .badge.pending { background: rgba(234, 88, 12, 0.15); color: var(--orange); }
+        .badge.approved { background: rgba(22, 163, 74, 0.15); color: var(--green); }
+        .badge.disabled { background: rgba(220, 38, 38, 0.15); color: var(--red); }
+        .badge.course { background: rgba(37, 99, 235, 0.15); color: var(--blue); margin-right: 5px; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+        .tab { padding: 12px 20px; font-weight: 800; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; }
+        .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+        
+        /* Table */
+        .panel { background: var(--bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 16px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        th { font-weight: 800; color: var(--text-muted); text-transform: uppercase; font-size: 0.75rem; }
+        td { font-weight: 600; }
+        tbody tr:hover { background: var(--surface); }
+        
+        .actions { display: flex; gap: 8px; }
+        .actions button { padding: 6px 12px; font-size: 0.75rem; }
+
+        /* Loader & Overlay */
+        .screen-center { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; text-align: center; }
+        .spinner { width: 50px; height: 50px; border: 4px solid var(--border); border-top: 4px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Modals */
+        dialog { margin: auto; background: var(--bg); border: 2px solid var(--text); border-radius: 16px; padding: 25px; width: 90%; max-width: 450px; color: var(--text); box-shadow: -6px 6px 0 var(--accent); }
+        dialog::backdrop { background: rgba(255,255,255,0.85); backdrop-filter: blur(4px); }
+        .checkbox-group { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; }
+        .checkbox-group label { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Pantalla de validación inicial -->
+    <div id="loader" class="screen-center">
+        <div class="spinner"></div>
+        <h2>Verificando credenciales...</h2>
+        <p style="color: var(--text-muted);">Solo personal autorizado.</p>
+    </div>
+
+    <!-- Mensaje de acceso denegado -->
+    <div id="denied" class="screen-center hidden">
+        <h2 style="color: var(--red);">Acceso Denegado</h2>
+        <p style="color: var(--text-muted); margin-bottom: 20px;">No tienes privilegios de administrador.</p>
+        <button class="btn outline" onclick="logout()">Volver al Inicio</button>
+    </div>
+
+    <!-- Panel Principal -->
+    <div id="dashboard" class="hidden">
+        <nav class="navbar">
+            <h1>Parche500 | Admin</h1>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <span id="admin-email" style="font-weight: 700; font-size: 0.9rem; color: var(--text-muted);"></span>
+                <button class="btn outline" onclick="logout()">Salir</button>
+            </div>
+        </nav>
+
+        <div class="container">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('pending', this)">Pendientes (<span id="count-pending">0</span>)</div>
+                <div class="tab" onclick="switchTab('approved', this)">Aprobados (<span id="count-approved">0</span>)</div>
+                <div class="tab" onclick="switchTab('disabled', this)">Deshabilitados (<span id="count-disabled">0</span>)</div>
+            </div>
+
+            <div class="panel">
+                <table id="users-table">
+                    <thead>
+                        <tr>
+                            <th>Email / UID</th>
+                            <th>Estado</th>
+                            <th>Cursos Activos</th>
+                            <th>Fecha Registro</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- El contenido se inyecta por JS -->
+                    </tbody>
+                </table>
+                <div id="empty-state" class="hidden" style="text-align: center; padding: 40px; color: var(--text-muted); font-weight: 600;">
+                    No hay usuarios en esta categoría.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para aprobar usuario -->
+    <dialog id="modal-approve">
+        <h2 style="margin-bottom: 10px;">Aprobar Aspirante</h2>
+        <p style="font-size: 0.9rem; color: var(--text-muted);">Selecciona los cursos a los que tendrá acceso <strong id="approve-email"></strong>.</p>
+        
+        <div class="checkbox-group">
+            <label><input type="checkbox" id="course-udea" value="udea"> PreUdeA</label>
+            <label><input type="checkbox" id="course-unal" value="unal"> PreUNAL</label>
+            <label><input type="checkbox" id="course-icfes" value="icfes"> Saber 11 (ICFES)</label>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 25px;">
+            <button class="btn outline" style="flex: 1;" onclick="document.getElementById('modal-approve').close()">Cancelar</button>
+            <button class="btn accent" style="flex: 1;" id="btn-confirm-approve">Confirmar</button>
+        </div>
+    </dialog>
+
+<script type="module">
+    // --- 1. CONFIGURACIÓN Y MÓDULOS ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
+    import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+    import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-functions.js";
+    
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzZjGlQKmcBJaNZmx59vOcFWq9sRl8bf4",
+      authDomain: "parche500-977df.firebaseapp.com",
+      projectId: "parche500-977df",
+      storageBucket: "parche500-977df.firebasestorage.app",
+      messagingSenderId: "795235753580",
+      appId: "1:795235753580:web:b6465f5838b60d30668249",
+      measurementId: "G-ZW0H9FNBEF"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const functions = getFunctions(app);
+
+    // Conexión con las Cloud Functions
+    const approveAspirantFn = httpsCallable(functions, 'approveAspirant');
+    const revokeAspirantFn = httpsCallable(functions, 'revokeAspirant');
+    const setAdminClaimFn = httpsCallable(functions, 'setAdminClaim');
+
+    let allUsers = [];
+    let currentFilter = 'pending';
+    let targetUidToApprove = null;
+
+    // --- 2. VALIDACIÓN DE SEGURIDAD Y ESTADO ---
+    onAuthStateChanged(auth, async user => {
+        if (user) {
+            try {
+                // Forzar lectura del token actualizado
+                const idTokenResult = await user.getIdTokenResult(true);
+                
+                // Si el token tiene la marca inmutable "admin: true"
+                if (idTokenResult.claims.admin === true) {
+                    document.getElementById('loader').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                    document.getElementById('admin-email').innerText = user.email;
+                    
+                    // Iniciar escucha en tiempo real de la base de datos
+                    startUsersListener();
+                } else {
+                    // Si está logueado pero no es admin
+                    document.getElementById('loader').classList.add('hidden');
+                    document.getElementById('denied').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error("Error validando admin:", error);
+                alert("Error validando sesión.");
+            }
+        } else {
+            // Redirigir al inicio de sesión si no hay nadie logueado
+            window.location.href = '/curso-udea/udea'; // Cambia esto por tu ruta de login
+        }
+    });
+
+    window.logout = async function() {
+        await signOut(auth);
+        window.location.href = '/curso-udea/udea';
+    }
+
+    // --- 3. LOGICA EN TIEMPO REAL ---
+    function startUsersListener() {
+        const usersRef = collection(db, "authorizedUsers");
+        const q = query(usersRef, orderBy("createdAt", "desc"));
+        
+        onSnapshot(q, (snapshot) => {
+            allUsers = [];
+            snapshot.forEach((doc) => {
+                allUsers.push({ uid: doc.id, ...doc.data() });
+            });
+            renderTable();
+        }, (error) => {
+            console.error("Error leyendo usuarios:", error);
+            alert("No se pudieron cargar los usuarios. Revisa los permisos.");
+        });
+    }
+
+    // --- 4. RENDERIZADO DE INTERFAZ ---
+    window.switchTab = function(status, el) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        currentFilter = status;
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('table-body');
+        const emptyState = document.getElementById('empty-state');
+        const table = document.getElementById('users-table');
+        
+        tbody.innerHTML = '';
+        
+        // Contadores
+        let pCount = 0, aCount = 0, dCount = 0;
+        
+        const filteredUsers = allUsers.filter(u => {
+            if (u.status === 'pending') pCount++;
+            if (u.status === 'approved') aCount++;
+            if (u.status === 'disabled') dCount++;
+            return u.status === currentFilter;
+        });
+
+        document.getElementById('count-pending').innerText = pCount;
+        document.getElementById('count-approved').innerText = aCount;
+        document.getElementById('count-disabled').innerText = dCount;
+
+        if (filteredUsers.length === 0) {
+            table.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        table.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+
+        filteredUsers.forEach(user => {
+            const tr = document.createElement('tr');
+            
+            // Columna 1: Email y UID
+            const tdInfo = document.createElement('td');
+            tdInfo.innerHTML = `<strong style="color:var(--text); display:block;">${user.email || 'Sin correo'}</strong><span style="font-size:0.75rem; color:var(--text-muted);">${user.uid}</span>`;
+            
+            // Columna 2: Estado
+            const tdStatus = document.createElement('td');
+            let badgeClass = user.status;
+            let statusText = user.status === 'pending' ? 'Pendiente' : (user.status === 'approved' ? 'Aprobado' : 'Revocado');
+            tdStatus.innerHTML = `<span class="badge ${badgeClass}">${statusText}</span>`;
+            
+            // Columna 3: Cursos
+            const tdCourses = document.createElement('td');
+            if (user.courses) {
+                let coursesHtml = Object.keys(user.courses)
+                    .filter(key => user.courses[key] === true)
+                    .map(c => `<span class="badge course">${c.toUpperCase()}</span>`)
+                    .join('');
+                tdCourses.innerHTML = coursesHtml || '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+            } else {
+                tdCourses.innerHTML = '<span style="color:var(--text-muted); font-size:0.8rem;">Ninguno</span>';
+            }
+
+            // Columna 4: Fecha
+            const tdDate = document.createElement('td');
+            let dateStr = 'N/A';
+            if (user.createdAt && user.createdAt.toDate) {
+                dateStr = user.createdAt.toDate().toLocaleDateString('es-ES');
+            }
+            tdDate.innerHTML = `<span style="color:var(--text-muted); font-size:0.85rem;">${dateStr}</span>`;
+            
+            // Columna 5: Acciones (Botones dinámicos)
+            const tdActions = document.createElement('td');
+            const actionDiv = document.createElement('div');
+            actionDiv.className = 'actions';
+
+            if (user.status === 'pending' || user.status === 'disabled') {
+                actionDiv.innerHTML += `<button class="btn accent" onclick="openApproveModal('${user.uid}', '${user.email}')">Aprobar</button>`;
+            }
+            if (user.status === 'approved') {
+                actionDiv.innerHTML += `<button class="btn danger" onclick="revokeUser('${user.uid}')">Revocar</button>`;
+            }
+            // Opción avanzada oculta por defecto, útil para escalar equipo
+            // actionDiv.innerHTML += `<button class="btn outline" onclick="makeAdmin('${user.uid}')">Dar Admin</button>`;
+
+            tdActions.appendChild(actionDiv);
+            
+            tr.append(tdInfo, tdStatus, tdCourses, tdDate, tdActions);
+            tbody.appendChild(tr);
+        });
+    }
+
+    // --- 5. ACCIONES ADMINISTRATIVAS ---
+
+    window.openApproveModal = function(uid, email) {
+        targetUidToApprove = uid;
+        document.getElementById('approve-email').innerText = email;
+        
+        // Reset checkboxes
+        document.getElementById('course-udea').checked = false;
+        document.getElementById('course-unal').checked = false;
+        document.getElementById('course-icfes').checked = false;
+
+        document.getElementById('modal-approve').showModal();
+    }
+
+    document.getElementById('btn-confirm-approve').addEventListener('click', async () => {
+        if (!targetUidToApprove) return;
+        
+        const btn = document.getElementById('btn-confirm-approve');
+        btn.innerText = "Procesando...";
+        btn.disabled = true;
+
+        const coursesToAssign = {
+            udea: document.getElementById('course-udea').checked,
+            unal: document.getElementById('course-unal').checked,
+            icfes: document.getElementById('course-icfes').checked
+        };
+
+        try {
+            await approveAspirantFn({ uid: targetUidToApprove, courses: coursesToAssign });
+            document.getElementById('modal-approve').close();
+        } catch (error) {
+            console.error(error);
+            alert("Error al aprobar: " + error.message);
+        } finally {
+            btn.innerText = "Confirmar";
+            btn.disabled = false;
+            targetUidToApprove = null;
+        }
+    });
+
+    window.revokeUser = async function(uid) {
+        if(confirm("¿Estás seguro de que quieres revocar el acceso a este usuario? Se bloqueará su entrada a todos los módulos.")) {
+            try {
+                await revokeAspirantFn({ uid: uid });
+            } catch (error) {
+                console.error(error);
+                alert("Error al revocar: " + error.message);
+            }
+        }
+    }
+
+    window.makeAdmin = async function(uid) {
+        if(confirm("¡ATENCIÓN! Le darás privilegios administrativos totales a este usuario. ¿Continuar?")) {
+            try {
+                await setAdminClaimFn({ uid: uid, admin: true });
+                alert("Permisos otorgados. El usuario deberá cerrar y volver a iniciar sesión.");
+            } catch (error) {
+                alert("Error al asignar rol: " + error.message);
+            }
+        }
+    }
+</script>
+</body>
+</html>
